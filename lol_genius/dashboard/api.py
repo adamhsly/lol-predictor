@@ -29,6 +29,24 @@ _sse_counter = itertools.count(1)
 _live_game_poller = None
 
 
+def _db_unavailable_response(request: Request) -> JSONResponse:
+    return JSONResponse(
+        {
+            "error": "database_unavailable",
+            "detail": "Database is unavailable; dashboard is running in basic mode.",
+            "basic_mode": bool(getattr(request.app.state, "basic_mode", False)),
+        },
+        status_code=503,
+    )
+
+
+def _require_pool(request: Request):
+    pool = getattr(request.app.state, "pool", None)
+    if pool is None:
+        return None
+    return pool
+
+
 def _push_sse(event_type: str, data: dict):
     _sse_events.append(
         {
@@ -59,7 +77,9 @@ def _serialize_model_run(run: dict) -> dict:
 
 @router.get("/status")
 async def status(request: Request):
-    pool = request.app.state.pool
+    pool = _require_pool(request)
+    if pool is None:
+        return _db_unavailable_response(request)
 
     def _query():
         with pooled_db(pool) as db:
@@ -76,7 +96,9 @@ async def status(request: Request):
 
 @router.get("/distributions")
 async def distributions(request: Request):
-    pool = request.app.state.pool
+    pool = _require_pool(request)
+    if pool is None:
+        return _db_unavailable_response(request)
 
     def _query():
         with pooled_db(pool) as db:
@@ -119,7 +141,9 @@ async def model_runs(
 ):
     if model_type is not None and model_type not in _VALID_MODEL_TYPES:
         return JSONResponse({"error": "Invalid model_type"}, status_code=400)
-    pool = request.app.state.pool
+    pool = _require_pool(request)
+    if pool is None:
+        return _db_unavailable_response(request)
 
     def _query():
         with pooled_db(pool) as db:
@@ -131,7 +155,9 @@ async def model_runs(
 
 @router.get("/model/runs/{run_id}")
 async def model_run_detail(request: Request, run_id: str):
-    pool = request.app.state.pool
+    pool = _require_pool(request)
+    if pool is None:
+        return _db_unavailable_response(request)
 
     def _query():
         with pooled_db(pool) as db:
@@ -157,6 +183,9 @@ async def training_status():
 
 @router.post("/model/train")
 async def trigger_training(request: Request):
+    if _require_pool(request) is None:
+        return _db_unavailable_response(request)
+
     if _training_lock.locked():
         return JSONResponse(
             {"error": "Training already in progress", "status": _training_status},
@@ -398,8 +427,16 @@ def _run_training_pipeline(
 
 @router.get("/system/health")
 async def system_health(request: Request):
-    pool = request.app.state.pool
+    pool = _require_pool(request)
     proxy_url = request.app.state.proxy_url
+    basic_mode = bool(getattr(request.app.state, "basic_mode", False))
+    if pool is None:
+        return {
+            "db_ok": False,
+            "proxy_health": None,
+            "stale_enrichment": {},
+            "basic_mode": basic_mode,
+        }
 
     def _db_check():
         try:
@@ -435,6 +472,7 @@ async def system_health(request: Request):
         "db_ok": db_ok,
         "proxy_health": proxy_health,
         "stale_enrichment": stale,
+        "basic_mode": basic_mode,
     }
 
 
@@ -449,7 +487,9 @@ async def champion_stats(
     if tier is not None and tier not in TIER_ORDER:
         return JSONResponse({"error": f"Invalid tier: {tier}"}, status_code=400)
 
-    pool = request.app.state.pool
+    pool = _require_pool(request)
+    if pool is None:
+        return _db_unavailable_response(request)
     ddragon_cache = request.app.state.ddragon_cache
 
     def _query():
@@ -551,6 +591,9 @@ async def predict_lookup(request: Request, game_name: str = Query(...), tag_line
 
 @router.post("/predict/live")
 async def predict_live(request: Request):
+    if _require_pool(request) is None:
+        return _db_unavailable_response(request)
+
     body = await request.json()
     game_data = body.get("game_data")
     if not game_data:
@@ -589,6 +632,8 @@ async def predict_live(request: Request):
 @router.post("/live-game/start")
 async def live_game_start(request: Request):
     global _live_game_poller
+    if _require_pool(request) is None:
+        return _db_unavailable_response(request)
 
     body = {}
     try:
@@ -659,7 +704,9 @@ async def live_game_status():
 
 @router.get("/events")
 async def sse_stream(request: Request):
-    pool = request.app.state.pool
+    pool = _require_pool(request)
+    if pool is None:
+        return _db_unavailable_response(request)
 
     def _poll():
         with pooled_db(pool) as db:

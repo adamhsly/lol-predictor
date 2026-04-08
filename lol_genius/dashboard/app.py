@@ -21,17 +21,33 @@ async def lifespan(app: FastAPI):
     proxy_url = os.environ.get("PROXY_URL", "http://localhost:8080")
     model_dir = os.environ.get("MODEL_DIR", "data/models")
     ddragon_cache = os.environ.get("DDRAGON_CACHE", "data/ddragon")
+    basic_mode = os.environ.get("DASHBOARD_BASIC_MODE", "0") == "1"
 
-    pool = create_pool(dsn, minconn=1, maxconn=5)
+    pool = None
+    db_ready = False
+    try:
+        pool = create_pool(dsn, minconn=1, maxconn=5)
+        db_ready = True
+    except Exception:
+        if not basic_mode:
+            raise
+        log.exception("Dashboard API starting in basic mode (database unavailable)")
+
     app.state.pool = pool
+    app.state.db_ready = db_ready
+    app.state.basic_mode = basic_mode
     app.state.dsn = dsn
     app.state.proxy_url = proxy_url
     app.state.model_dir = model_dir
     app.state.ddragon_cache = ddragon_cache
 
-    log.info(f"Dashboard API started: pool created, proxy={proxy_url}")
+    if db_ready:
+        log.info(f"Dashboard API started: pool created, proxy={proxy_url}")
+    else:
+        log.info(f"Dashboard API started in basic mode: proxy={proxy_url}")
     yield
-    pool.closeall()
+    if pool is not None:
+        pool.closeall()
     log.info("Dashboard API shut down")
 
 
