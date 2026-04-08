@@ -1,0 +1,9 @@
+# Minimal backend dependencies for dashboard BASIC mode.
+# BASIC mode goal: API process boots and serves non-DB-safe routes with graceful DB-unavailable 503s.
+fastapi>=0.110
+uvicorn[standard]>=0.30
+sse-starlette>=2.1
+httpx>=0.27
+psycopg2-binary>=2.9
+pyyaml>=6.0
+python-dotenv>=1.0
