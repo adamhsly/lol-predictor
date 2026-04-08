@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Activity, Brain, Trophy, Crosshair, Gamepad2 } from "lucide-react";
-import { fetchTrainingStatus } from "./api";
+import { fetchSystemHealth, fetchTrainingStatus } from "./api";
 import { useSSE } from "./hooks/useSSE";
 import CrawlerStatus from "./pages/CrawlerStatus";
 import ModelTraining from "./pages/ModelTraining";
@@ -30,6 +30,10 @@ export default function App() {
     fetchTrainingStatus().then((s) => {
       if (s.stage !== "idle") setTrainingStatus(s);
     }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchSystemHealth().catch(() => {});
   }, []);
 
   const handleCrawlerStatus = useCallback((data: unknown) => {
