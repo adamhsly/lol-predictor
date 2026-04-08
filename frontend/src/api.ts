@@ -10,7 +10,7 @@ import type {
   ChampionStatsResponse,
 } from "./types";
 
-const BASE = "/api/v1";
+const BASE = (import.meta.env.VITE_API_BASE_URL || "/api/v1").replace(/\/$/, "");
 
 async function parseErrorBody(res: Response): Promise<string> {
   try {
@@ -77,10 +77,7 @@ export async function stopLiveGame(): Promise<void> {
 
 export const fetchLiveGameStatus = () => get<LiveGameStatus>("/live-game/status");
 
-export const fetchSystemHealth = () =>
-  get<{ db_ok: boolean; proxy_health: unknown; stale_enrichment: unknown; basic_mode?: boolean }>(
-    "/system/health",
-  );
+export const fetchSystemHealth = () => get<{ db_ok: boolean; proxy_health: unknown; stale_enrichment: unknown }>("/system/health");
 
 export const fetchChampionStats = (patch?: string, tier?: string) => {
   const params = new URLSearchParams();
