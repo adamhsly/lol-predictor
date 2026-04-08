@@ -77,6 +77,8 @@ export async function stopLiveGame(): Promise<void> {
 
 export const fetchLiveGameStatus = () => get<LiveGameStatus>("/live-game/status");
 
+export const fetchSystemHealth = () => get<{ db_ok: boolean; proxy_health: unknown; stale_enrichment: unknown }>("/system/health");
+
 export const fetchChampionStats = (patch?: string, tier?: string) => {
   const params = new URLSearchParams();
   if (patch) params.set("patch", patch);
