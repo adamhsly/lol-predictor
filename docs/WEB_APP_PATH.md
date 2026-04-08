@@ -1,138 +1,95 @@
-# Web-only runtime runbook (real machine with internet access)
+# Web-only runbook (Phase A)
 
-This runbook is for running **backend + frontend dashboard** without Electron.
+This runbook defines the **web-only path** for `lol-genius` without using Electron.
 
-## 1) Minimal backend dependencies
+Scope for this phase:
+- use the existing React frontend (`frontend/`)
+- use the existing FastAPI dashboard backend (`lol_genius.dashboard.*`)
+- keep Electron and ML/data pipeline code untouched
 
-### A) BASIC mode backend dependencies
+## Architecture (web-only)
 
-Use `requirements-web-basic.txt` for the smallest backend footprint needed to boot the dashboard API in degraded mode:
+- Frontend: Vite + React app in `frontend/`
+- Backend API: FastAPI app in `lol_genius/dashboard/app.py` exposed at `/api/v1`
+- Optional upstream service for Riot lookups/live features: Riot proxy (`PROXY_URL`, default `http://localhost:8080`)
+- Data store: PostgreSQL (`DATABASE_URL`)
 
-- `fastapi`
-- `uvicorn[standard]`
-- `sse-starlette`
-- `httpx`
-- `psycopg2-binary`
-- `pyyaml`
-- `python-dotenv`
+## Required services and env vars
 
-Install:
+### Required for backend startup
 
-```bash
-python -m pip install -r requirements-web-basic.txt
-```
+- Python 3.11+
+- Installed Python deps including dashboard extras (FastAPI/uvicorn/sse-starlette)
+- `DATABASE_URL` (PostgreSQL DSN)
 
-### B) NORMAL mode backend dependencies
+### Required for full feature set (predict/live endpoints)
 
-Use `requirements-web.txt` for full dashboard functionality (including model/training routes):
+- `PROXY_URL` reachable (default `http://localhost:8080`)
+- model artifacts under `MODEL_DIR` (default `data/models`)
+- champion cache under `DDRAGON_CACHE` (default `data/ddragon`)
 
-- everything in `requirements-web-basic.txt`
-- `numpy`, `pandas`, `scikit-learn`, `xgboost`, `shap`, `matplotlib`, `pyarrow`, `click`, `tqdm`
+### Optional auth and CORS
 
-Install:
+- `API_KEY` (if set, requires `X-Api-Key` on `/api/v1/*` except `/api/v1/events`)
+- `CORS_ALLOWED_ORIGINS` (defaults include `http://localhost:5173` and `http://localhost:3000`)
 
-```bash
-python -m pip install -r requirements-web.txt
-```
+## Local dev commands (no Docker)
 
-## 2) Frontend dependencies
-
-Minimal frontend setup:
-
-- Node.js 20+
-- npm
-- `frontend/package-lock.json` managed dependencies via `npm ci`
-
-Install and run:
+### 1) Backend API
 
 ```bash
-cd frontend
-npm ci
-npm run dev -- --host 0.0.0.0 --port 5173
-```
+# from repo root
+python -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dashboard]"
 
-## 3) Environment variables (minimal)
-
-### Backend basic mode (minimal)
-
-- `DASHBOARD_BASIC_MODE=1`
-- `DATABASE_URL` (can be invalid/unreachable in basic mode; app still boots degraded)
-
-Recommended defaults:
-
-```bash
 export DATABASE_URL="postgresql://lol_genius:lol_genius_dev@localhost:5432/lol_genius"
-export PROXY_URL="http://localhost:8080"
-export MODEL_DIR="data/models"
-export DDRAGON_CACHE="data/ddragon"
-export DASHBOARD_BASIC_MODE=1
-```
+export PROXY_URL="http://localhost:8080"           # optional but recommended
+export MODEL_DIR="data/models"                      # optional
+export DDRAGON_CACHE="data/ddragon"                 # optional
 
-### Backend normal mode
-
-- `DASHBOARD_BASIC_MODE` unset or `0`
-- working `DATABASE_URL` required
-- `PROXY_URL`, `MODEL_DIR`, `DDRAGON_CACHE` recommended for full features
-
-## 4) Exact run commands
-
-### Backend (basic mode)
-
-```bash
-DASHBOARD_BASIC_MODE=1 python -m lol_genius.dashboard.run
-```
-
-### Backend (normal mode)
-
-```bash
 python -m lol_genius.dashboard.run
 ```
 
-### Frontend
+Backend listens on `http://localhost:8081` by default.
+
+### 2) Frontend
 
 ```bash
+# new terminal
 cd frontend
 npm ci
-npm run dev -- --host 0.0.0.0 --port 5173
+npm run dev
 ```
 
-### Combined helper (already in repo)
+Frontend listens on `http://localhost:5173` by default and proxies `/api/*` to `http://localhost:8081`.
+
+## Docker commands (web-only service subset)
 
 ```bash
-./scripts/web_only_start.sh basic
-# or
-./scripts/web_only_start.sh both
+cp .env.example .env
+# set RIOT_API_KEY and POSTGRES_PASSWORD in .env
+
+docker compose up -d postgres riot-proxy migrate dashboard-api dashboard
 ```
 
-## 5) Behavior expectations
+This intentionally excludes `crawler` and Electron.
 
-- **Normal mode**: DB init failures stop backend startup.
-- **Basic mode**: backend stays up even if DB pool init fails; DB-dependent routes return structured `503` responses.
-
-Example structured response:
-
-```json
-{
-  "error": "database_unavailable",
-  "detail": "Database is unavailable; dashboard is running in basic mode.",
-  "basic_mode": true
-}
-```
-
-## 6) Recommended setup flow on a fresh machine
+## Minimal smoke checks
 
 ```bash
-# 1) Python backend deps
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install -U pip
-python -m pip install -r requirements-web-basic.txt   # or requirements-web.txt for full mode
+# API health-ish check
+curl -sf http://localhost:8081/api/v1/model/training-status
 
-# 2) Backend run (basic first)
-DASHBOARD_BASIC_MODE=1 python -m lol_genius.dashboard.run
+# SSE endpoint should respond (stream)
+curl -N http://localhost:8081/api/v1/events
 
-# 3) Frontend run (new terminal)
-cd frontend
-npm ci
-npm run dev -- --host 0.0.0.0 --port 5173
+# Frontend build check
+cd frontend && npm run build
 ```
+
+## Notes
+
+- If PostgreSQL is unavailable, backend startup or most API routes will fail.
+- If `PROXY_URL` is unavailable, lookup/predict/live routes may fail.
+- This runbook is Phase A only; no migration/rewrite behavior changes are introduced.

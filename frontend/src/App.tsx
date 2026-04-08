@@ -34,9 +34,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetchSystemHealth().then((h) => {
-      if (h.basic_mode || h.db_ok === false) setBasicMode(true);
-    }).catch(() => {});
+    fetchSystemHealth().catch(() => {});
   }, []);
 
   const handleCrawlerStatus = useCallback((data: unknown) => {
