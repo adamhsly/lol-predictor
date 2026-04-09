@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Activity, Brain, Trophy, Crosshair, Gamepad2 } from "lucide-react";
-import { fetchTrainingStatus } from "./api";
+import { fetchSystemHealth, fetchTrainingStatus } from "./api";
 import { useSSE } from "./hooks/useSSE";
 import CrawlerStatus from "./pages/CrawlerStatus";
 import ModelTraining from "./pages/ModelTraining";
@@ -25,11 +25,16 @@ export default function App() {
   const [crawlerData, setCrawlerData] = useState<CrawlerSSE | null>(null);
   const [trainingStatus, setTrainingStatus] = useState<TrainingStatus | null>(null);
   const [liveGameUpdate, setLiveGameUpdate] = useState<LiveGameUpdate | null>(null);
+  const [basicMode, setBasicMode] = useState(false);
 
   useEffect(() => {
     fetchTrainingStatus().then((s) => {
       if (s.stage !== "idle") setTrainingStatus(s);
     }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    fetchSystemHealth().catch(() => {});
   }, []);
 
   const handleCrawlerStatus = useCallback((data: unknown) => {
@@ -73,6 +78,9 @@ export default function App() {
           ))}
         </nav>
         <div style={styles.headerRight}>
+          {basicMode && (
+            <span style={styles.basicModeBadge}>BASIC MODE</span>
+          )}
           <span
             style={{
               ...styles.dot,
@@ -155,7 +163,16 @@ const styles: Record<string, React.CSSProperties> = {
   headerRight: {
     display: "flex",
     alignItems: "center",
-    gap: 6,
+    gap: 8,
+  },
+  basicModeBadge: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "1px",
+    color: "var(--gold)",
+    border: "1px solid var(--gold)",
+    borderRadius: 4,
+    padding: "2px 6px",
   },
   dot: {
     width: 8,

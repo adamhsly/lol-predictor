@@ -4,9 +4,6 @@ import logging
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 
-from lol_genius.features.stats import aggregate_recent_stats
-from lol_genius.features.timeline import SNAPSHOT_SECONDS
-
 from .connection import get_connection
 
 log = logging.getLogger(__name__)
@@ -23,6 +20,18 @@ TIER_ORDER = {
     "GRANDMASTER": 9,
     "CHALLENGER": 10,
 }
+
+
+def _aggregate_recent_stats(puuid: str, rows: list[dict]) -> dict | None:
+    from lol_genius.features.stats import aggregate_recent_stats
+
+    return aggregate_recent_stats(puuid, rows)
+
+
+def _snapshot_seconds() -> list[int]:
+    from lol_genius.features.timeline import SNAPSHOT_SECONDS
+
+    return SNAPSHOT_SECONDS
 
 
 _LATEST_TIER_SUBQUERY = """(
@@ -519,7 +528,7 @@ class MatchDB:
             return None
 
         stat_rows = [dict(r) for r in rows]
-        return aggregate_recent_stats(puuid, stat_rows)
+        return _aggregate_recent_stats(puuid, stat_rows)
 
     def get_player_champion_stats(
         self,
@@ -1031,7 +1040,8 @@ class MatchDB:
         self._maybe_commit()
 
     def get_match_ids_without_timelines(self) -> list[str]:
-        placeholders = ",".join(["%s"] * len(SNAPSHOT_SECONDS))
+        snapshot_seconds = _snapshot_seconds()
+        placeholders = ",".join(["%s"] * len(snapshot_seconds))
         rows = self._fetchall(
             f"""SELECT m.match_id FROM matches m
                JOIN match_enrichment_status e ON m.match_id = e.match_id
@@ -1041,7 +1051,7 @@ class MatchDB:
                    WHERE t.match_id = m.match_id
                    AND t.snapshot_seconds IN ({placeholders})
                )""",
-            tuple(SNAPSHOT_SECONDS),
+            tuple(snapshot_seconds),
         )
         return [r["match_id"] for r in rows]
 
@@ -1060,7 +1070,8 @@ class MatchDB:
         self._maybe_commit()
 
     def get_timeline_training_data(self) -> list[dict]:
-        placeholders = ",".join(["%s"] * len(SNAPSHOT_SECONDS))
+        snapshot_seconds = _snapshot_seconds()
+        placeholders = ",".join(["%s"] * len(snapshot_seconds))
         rows = self._fetchall(
             f"""SELECT mt.match_id, m.game_creation,
                       mt.snapshot_seconds AS game_time_seconds,
@@ -1091,7 +1102,7 @@ class MatchDB:
                JOIN matches m ON mt.match_id = m.match_id
                WHERE mt.snapshot_seconds IN ({placeholders})
                ORDER BY mt.match_id, mt.snapshot_seconds""",
-            tuple(SNAPSHOT_SECONDS),
+            tuple(snapshot_seconds),
         )
         return [dict(r) for r in rows]
 
