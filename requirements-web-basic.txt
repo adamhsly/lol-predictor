@@ -1,0 +1,2 @@
+# Alias file for local scripts/docs that reference "basic mode" explicitly.
+-r requirements-web.txt
