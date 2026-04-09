@@ -14,7 +14,7 @@ def main():
     import uvicorn
 
     host = os.environ.get("DASHBOARD_HOST", "0.0.0.0")
-    port = int(os.environ.get("DASHBOARD_PORT", "8081"))
+    port = int(os.environ.get("PORT", os.environ.get("DASHBOARD_PORT", "8081")))
     uvicorn.run("lol_genius.dashboard.app:app", host=host, port=port, log_level="info")
 
 
